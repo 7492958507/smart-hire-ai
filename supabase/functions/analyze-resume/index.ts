@@ -29,15 +29,17 @@ serve(async (req) => {
     const systemPrompt = `You are an expert HR analyst and career coach. Analyze resumes and provide detailed feedback.
 
 Your analysis should include:
-1. Overall score (0-100)
-2. Matched skills found in the resume
-3. Missing skills that are commonly expected or mentioned in the job description
-4. Specific improvement suggestions
-5. Strengths identified
+1. Overall score (0-100) - how strong the resume is overall
+2. Job match score (0-100) - how well the resume matches the job description (only if JD provided, otherwise set to null)
+3. Matched skills found in the resume
+4. Missing skills that are commonly expected or mentioned in the job description
+5. Specific improvement suggestions
+6. Strengths identified
 
 Return your analysis as a JSON object with this structure:
 {
   "overallScore": number,
+  "jobMatchScore": number | null,
   "matchedSkills": string[],
   "missingSkills": string[],
   "improvements": string[],
@@ -108,6 +110,7 @@ Return your analysis as a JSON object with this structure:
       // Return a default structure if parsing fails
       analysis = {
         overallScore: 70,
+        jobMatchScore: null,
         matchedSkills: ["Communication", "Problem Solving"],
         missingSkills: ["Could not fully analyze"],
         improvements: ["Please try uploading again with clearer formatting"],
