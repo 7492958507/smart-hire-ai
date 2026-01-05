@@ -14,6 +14,7 @@ import { toast } from "sonner";
 
 interface AnalysisResult {
   overallScore: number;
+  jobMatchScore: number | null;
   matchedSkills: string[];
   missingSkills: string[];
   improvements: string[];
@@ -135,6 +136,7 @@ const CandidateDashboard = () => {
   };
 
   const overallScore = analysis?.overallScore || 0;
+  const jobMatchScore = analysis?.jobMatchScore;
   const matchedSkills = analysis?.matchedSkills || [];
   const missingSkills = analysis?.missingSkills || [];
   const improvements = analysis?.improvements || [];
@@ -215,7 +217,7 @@ const CandidateDashboard = () => {
         {hasResume && analysis ? (
           <>
             {/* Score Overview */}
-            <div className="grid grid-cols-4 gap-6 mb-8">
+            <div className={`grid gap-6 mb-8 ${jobMatchScore !== null ? 'grid-cols-5' : 'grid-cols-4'}`}>
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -223,40 +225,85 @@ const CandidateDashboard = () => {
               >
                 <Card variant="gradient" className="h-full">
                   <CardContent className="p-6 flex flex-col items-center justify-center h-full">
-                    <div className="relative w-32 h-32 mb-4">
+                    <div className="relative w-28 h-28 mb-4">
                       <svg className="w-full h-full transform -rotate-90">
                         <circle
-                          cx="64"
-                          cy="64"
-                          r="56"
+                          cx="56"
+                          cy="56"
+                          r="48"
                           fill="none"
                           stroke="hsl(var(--secondary))"
-                          strokeWidth="12"
+                          strokeWidth="10"
                         />
                         <circle
-                          cx="64"
-                          cy="64"
-                          r="56"
+                          cx="56"
+                          cy="56"
+                          r="48"
                           fill="none"
                           stroke="hsl(var(--primary))"
-                          strokeWidth="12"
-                          strokeDasharray={`${overallScore * 3.52} 352`}
+                          strokeWidth="10"
+                          strokeDasharray={`${overallScore * 3.02} 302`}
                           strokeLinecap="round"
                           className="transition-all duration-1000"
                         />
                       </svg>
                       <div className="absolute inset-0 flex items-center justify-center flex-col">
-                        <span className="text-3xl font-display font-bold">{overallScore}%</span>
-                        <span className="text-xs text-muted-foreground">Overall</span>
+                        <span className="text-2xl font-display font-bold">{overallScore}%</span>
+                        <span className="text-[10px] text-muted-foreground">Overall</span>
                       </div>
                     </div>
-                    <h3 className="font-display font-semibold">Resume Score</h3>
-                    <p className="text-sm text-muted-foreground text-center mt-1">
-                      {overallScore >= 80 ? "Excellent resume!" : overallScore >= 60 ? "Good, with room to improve" : "Needs improvements"}
+                    <h3 className="font-display font-semibold text-sm">Resume Score</h3>
+                    <p className="text-xs text-muted-foreground text-center mt-1">
+                      {overallScore >= 80 ? "Excellent!" : overallScore >= 60 ? "Good" : "Needs work"}
                     </p>
                   </CardContent>
                 </Card>
               </motion.div>
+
+              {jobMatchScore !== null && (
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.05 }}
+                  className="col-span-1"
+                >
+                  <Card variant="gradient" className="h-full border-2 border-accent/30">
+                    <CardContent className="p-6 flex flex-col items-center justify-center h-full">
+                      <div className="relative w-28 h-28 mb-4">
+                        <svg className="w-full h-full transform -rotate-90">
+                          <circle
+                            cx="56"
+                            cy="56"
+                            r="48"
+                            fill="none"
+                            stroke="hsl(var(--secondary))"
+                            strokeWidth="10"
+                          />
+                          <circle
+                            cx="56"
+                            cy="56"
+                            r="48"
+                            fill="none"
+                            stroke="hsl(var(--accent))"
+                            strokeWidth="10"
+                            strokeDasharray={`${jobMatchScore * 3.02} 302`}
+                            strokeLinecap="round"
+                            className="transition-all duration-1000"
+                          />
+                        </svg>
+                        <div className="absolute inset-0 flex items-center justify-center flex-col">
+                          <span className="text-2xl font-display font-bold">{jobMatchScore}%</span>
+                          <span className="text-[10px] text-muted-foreground">JD Match</span>
+                        </div>
+                      </div>
+                      <h3 className="font-display font-semibold text-sm">Job Match</h3>
+                      <p className="text-xs text-muted-foreground text-center mt-1">
+                        {jobMatchScore >= 80 ? "Great fit!" : jobMatchScore >= 60 ? "Good match" : "Some gaps"}
+                      </p>
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              )}
 
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
