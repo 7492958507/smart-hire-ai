@@ -3,26 +3,23 @@ import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
 import { 
   Brain, FileText, Briefcase, BarChart3, Settings, LogOut, 
-  Upload, CheckCircle, AlertCircle, Lightbulb, TrendingUp,
-  BookOpen, Award, Target, ChevronRight, Sparkles, X
+  Upload, CheckCircle, AlertCircle, Lightbulb, 
+  BookOpen, Award, Target, ChevronRight, Sparkles, Loader2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
+import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 
-const mockSkills = {
-  matched: ["React", "TypeScript", "JavaScript", "Node.js", "Git"],
-  missing: ["Docker", "Kubernetes", "AWS", "CI/CD"],
-};
-
-const mockFeedback = [
-  { type: "improvement", text: "Add more quantifiable achievements to your experience section" },
-  { type: "improvement", text: "Include relevant certifications for cloud technologies" },
-  { type: "success", text: "Strong technical skills section with relevant technologies" },
-  { type: "success", text: "Well-structured education and project sections" },
-];
+interface AnalysisResult {
+  overallScore: number;
+  matchedSkills: string[];
+  missingSkills: string[];
+  improvements: string[];
+  strengths: string[];
+  summary: string;
+}
 
 const mockJobs = [
   { id: 1, title: "Senior React Developer", company: "TechCorp", location: "Remote", match: 92, salary: "$120K - $150K" },
@@ -32,18 +29,85 @@ const mockJobs = [
 
 const CandidateDashboard = () => {
   const [activeTab, setActiveTab] = useState("overview");
-  const [hasResume, setHasResume] = useState(true);
+  const [hasResume, setHasResume] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [resumeText, setResumeText] = useState("");
+  const [jobDescription, setJobDescription] = useState("");
+  const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleFileUpload = (file: File) => {
-    const validTypes = ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+  const analyzeResume = async (text: string, jd?: string) => {
+    setIsAnalyzing(true);
+    try {
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/analyze-resume`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          },
+          body: JSON.stringify({ 
+            resumeText: text,
+            jobDescription: jd 
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const error = await response.json();
+        if (response.status === 429) {
+          toast.error("Rate limit exceeded. Please try again later.");
+        } else if (response.status === 402) {
+          toast.error("AI credits exhausted. Please add funds.");
+        } else {
+          toast.error(error.error || "Analysis failed");
+        }
+        return;
+      }
+
+      const result: AnalysisResult = await response.json();
+      setAnalysis(result);
+      setHasResume(true);
+      toast.success("Resume analyzed successfully!");
+    } catch (error) {
+      console.error("Analysis error:", error);
+      toast.error("Failed to analyze resume");
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
+  const extractTextFromFile = async (file: File): Promise<string> => {
+    // For now, read as text - in production you'd use a PDF parser
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const text = e.target?.result as string;
+        resolve(text);
+      };
+      reader.onerror = reject;
+      reader.readAsText(file);
+    });
+  };
+
+  const handleFileUpload = async (file: File) => {
+    const validTypes = ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'text/plain'];
     if (!validTypes.includes(file.type)) {
-      toast.error("Please upload a PDF or DOCX file");
+      toast.error("Please upload a PDF, DOCX, or TXT file");
       return;
     }
-    toast.success(`Resume "${file.name}" uploaded successfully!`);
-    setHasResume(true);
+    
+    toast.info(`Processing "${file.name}"...`);
+    
+    try {
+      const text = await extractTextFromFile(file);
+      setResumeText(text);
+      await analyzeResume(text, jobDescription);
+    } catch (error) {
+      toast.error("Failed to read file");
+    }
   };
 
   const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -62,7 +126,24 @@ const CandidateDashboard = () => {
     }
   };
 
-  const overallScore = 76;
+  const handleManualAnalysis = () => {
+    if (!resumeText.trim()) {
+      toast.error("Please enter your resume text");
+      return;
+    }
+    analyzeResume(resumeText, jobDescription);
+  };
+
+  const overallScore = analysis?.overallScore || 0;
+  const matchedSkills = analysis?.matchedSkills || [];
+  const missingSkills = analysis?.missingSkills || [];
+  const improvements = analysis?.improvements || [];
+  const strengths = analysis?.strengths || [];
+
+  const feedback = [
+    ...improvements.map(text => ({ type: "improvement", text })),
+    ...strengths.map(text => ({ type: "success", text })),
+  ];
 
   return (
     <div className="min-h-screen bg-background flex">
@@ -115,7 +196,7 @@ const CandidateDashboard = () => {
           type="file"
           ref={fileInputRef}
           onChange={handleFileInputChange}
-          accept=".pdf,.docx"
+          accept=".pdf,.docx,.txt"
           className="hidden"
         />
 
@@ -125,13 +206,13 @@ const CandidateDashboard = () => {
             <h1 className="text-2xl font-display font-bold">Welcome, Amit Kumar!</h1>
             <p className="text-muted-foreground">Your AI-powered career dashboard</p>
           </div>
-          <Button variant="hero" onClick={() => fileInputRef.current?.click()}>
+          <Button variant="hero" onClick={() => { setHasResume(false); setAnalysis(null); }}>
             <Upload className="w-4 h-4" />
-            Update Resume
+            {hasResume ? "Upload New Resume" : "Upload Resume"}
           </Button>
         </div>
 
-        {hasResume ? (
+        {hasResume && analysis ? (
           <>
             {/* Score Overview */}
             <div className="grid grid-cols-4 gap-6 mb-8">
@@ -171,7 +252,7 @@ const CandidateDashboard = () => {
                     </div>
                     <h3 className="font-display font-semibold">Resume Score</h3>
                     <p className="text-sm text-muted-foreground text-center mt-1">
-                      Your resume is performing well!
+                      {overallScore >= 80 ? "Excellent resume!" : overallScore >= 60 ? "Good, with room to improve" : "Needs improvements"}
                     </p>
                   </CardContent>
                 </Card>
@@ -189,29 +270,36 @@ const CandidateDashboard = () => {
                       <Sparkles className="w-5 h-5 text-primary" />
                       AI Resume Analysis
                     </CardTitle>
+                    {analysis.summary && (
+                      <CardDescription>{analysis.summary}</CardDescription>
+                    )}
                   </CardHeader>
                   <CardContent>
                     <div className="grid grid-cols-2 gap-6">
                       <div>
                         <h4 className="text-sm font-medium text-muted-foreground mb-3">Matched Skills</h4>
                         <div className="flex flex-wrap gap-2">
-                          {mockSkills.matched.map((skill) => (
+                          {matchedSkills.length > 0 ? matchedSkills.map((skill) => (
                             <Badge key={skill} variant="match">
                               <CheckCircle className="w-3 h-3 mr-1" />
                               {skill}
                             </Badge>
-                          ))}
+                          )) : (
+                            <span className="text-sm text-muted-foreground">Upload resume to see skills</span>
+                          )}
                         </div>
                       </div>
                       <div>
                         <h4 className="text-sm font-medium text-muted-foreground mb-3">Skills to Develop</h4>
                         <div className="flex flex-wrap gap-2">
-                          {mockSkills.missing.map((skill) => (
+                          {missingSkills.length > 0 ? missingSkills.map((skill) => (
                             <Badge key={skill} variant="missing">
                               <AlertCircle className="w-3 h-3 mr-1" />
                               {skill}
                             </Badge>
-                          ))}
+                          )) : (
+                            <span className="text-sm text-muted-foreground">Great! No major gaps found</span>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -230,7 +318,7 @@ const CandidateDashboard = () => {
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-4">
-                      {mockFeedback.map((item, index) => (
+                      {feedback.length > 0 ? feedback.map((item, index) => (
                         <motion.div
                           key={index}
                           initial={{ opacity: 0, x: -20 }}
@@ -247,7 +335,9 @@ const CandidateDashboard = () => {
                           )}
                           <p className="text-sm">{item.text}</p>
                         </motion.div>
-                      ))}
+                      )) : (
+                        <p className="text-muted-foreground text-center py-4">No suggestions available</p>
+                      )}
                     </div>
                   </CardContent>
                 </Card>
@@ -262,8 +352,8 @@ const CandidateDashboard = () => {
                         <Target className="w-6 h-6 text-primary" />
                       </div>
                       <div>
-                        <div className="text-2xl font-display font-bold">23</div>
-                        <div className="text-sm text-muted-foreground">Job Matches</div>
+                        <div className="text-2xl font-display font-bold">{matchedSkills.length}</div>
+                        <div className="text-sm text-muted-foreground">Skills Found</div>
                       </div>
                     </div>
                   </CardContent>
@@ -276,8 +366,8 @@ const CandidateDashboard = () => {
                         <Award className="w-6 h-6 text-success" />
                       </div>
                       <div>
-                        <div className="text-2xl font-display font-bold">5</div>
-                        <div className="text-sm text-muted-foreground">Applications Sent</div>
+                        <div className="text-2xl font-display font-bold">{strengths.length}</div>
+                        <div className="text-sm text-muted-foreground">Strengths</div>
                       </div>
                     </div>
                   </CardContent>
@@ -290,8 +380,8 @@ const CandidateDashboard = () => {
                         <BookOpen className="w-6 h-6 text-accent" />
                       </div>
                       <div>
-                        <div className="text-2xl font-display font-bold">4</div>
-                        <div className="text-sm text-muted-foreground">Learning Paths</div>
+                        <div className="text-2xl font-display font-bold">{improvements.length}</div>
+                        <div className="text-sm text-muted-foreground">Improvements</div>
                       </div>
                     </div>
                   </CardContent>
@@ -352,27 +442,88 @@ const CandidateDashboard = () => {
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
           >
-            <Card variant="glass" className="max-w-2xl mx-auto">
-              <CardContent className="p-12">
+            <Card variant="glass" className="max-w-3xl mx-auto">
+              <CardContent className="p-8">
+                {/* File Upload Section */}
                 <div
-                  className={`border-2 border-dashed rounded-xl p-12 text-center transition-colors ${
+                  className={`border-2 border-dashed rounded-xl p-8 text-center transition-colors mb-6 ${
                     isDragging ? "border-primary bg-primary/5" : "border-border"
                   }`}
                   onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
                   onDragLeave={() => setIsDragging(false)}
                   onDrop={handleDrop}
                 >
-                  <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-6">
-                    <Upload className="w-8 h-8 text-primary" />
+                  <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
+                    {isAnalyzing ? (
+                      <Loader2 className="w-7 h-7 text-primary animate-spin" />
+                    ) : (
+                      <Upload className="w-7 h-7 text-primary" />
+                    )}
                   </div>
-                  <h2 className="text-2xl font-display font-bold mb-2">Upload Your Resume</h2>
-                  <p className="text-muted-foreground mb-6">
+                  <h2 className="text-xl font-display font-bold mb-2">
+                    {isAnalyzing ? "Analyzing Your Resume..." : "Upload Your Resume"}
+                  </h2>
+                  <p className="text-muted-foreground mb-4 text-sm">
                     Drag and drop your resume here, or click to browse.<br />
-                    Supports PDF and DOCX formats.
+                    Supports PDF, DOCX, and TXT formats.
                   </p>
-                  <Button variant="hero" size="lg" onClick={() => fileInputRef.current?.click()}>
-                    <Upload className="w-5 h-5" />
+                  <Button 
+                    variant="hero" 
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isAnalyzing}
+                  >
+                    <Upload className="w-4 h-4" />
                     Choose File
+                  </Button>
+                </div>
+
+                {/* Or Divider */}
+                <div className="flex items-center gap-4 my-6">
+                  <div className="flex-1 h-px bg-border" />
+                  <span className="text-sm text-muted-foreground">OR paste your resume text</span>
+                  <div className="flex-1 h-px bg-border" />
+                </div>
+
+                {/* Manual Text Input */}
+                <div className="space-y-4">
+                  <div>
+                    <label className="text-sm font-medium mb-2 block">Resume Text</label>
+                    <Textarea
+                      placeholder="Paste your resume content here..."
+                      value={resumeText}
+                      onChange={(e) => setResumeText(e.target.value)}
+                      className="min-h-[150px]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-sm font-medium mb-2 block">Job Description (Optional)</label>
+                    <Textarea
+                      placeholder="Paste the job description to compare against..."
+                      value={jobDescription}
+                      onChange={(e) => setJobDescription(e.target.value)}
+                      className="min-h-[100px]"
+                    />
+                  </div>
+
+                  <Button 
+                    variant="hero" 
+                    size="lg" 
+                    className="w-full"
+                    onClick={handleManualAnalysis}
+                    disabled={isAnalyzing || !resumeText.trim()}
+                  >
+                    {isAnalyzing ? (
+                      <>
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                        Analyzing...
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="w-5 h-5" />
+                        Analyze Resume with AI
+                      </>
+                    )}
                   </Button>
                 </div>
               </CardContent>
