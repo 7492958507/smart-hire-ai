@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
 import { 
@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { toast } from "sonner";
 
 const mockSkills = {
   matched: ["React", "TypeScript", "JavaScript", "Node.js", "Git"],
@@ -33,6 +34,33 @@ const CandidateDashboard = () => {
   const [activeTab, setActiveTab] = useState("overview");
   const [hasResume, setHasResume] = useState(true);
   const [isDragging, setIsDragging] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileUpload = (file: File) => {
+    const validTypes = ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+    if (!validTypes.includes(file.type)) {
+      toast.error("Please upload a PDF or DOCX file");
+      return;
+    }
+    toast.success(`Resume "${file.name}" uploaded successfully!`);
+    setHasResume(true);
+  };
+
+  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      handleFileUpload(file);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) {
+      handleFileUpload(file);
+    }
+  };
 
   const overallScore = 76;
 
@@ -82,13 +110,22 @@ const CandidateDashboard = () => {
 
       {/* Main Content */}
       <main className="flex-1 ml-64 p-8">
+        {/* Hidden file input */}
+        <input
+          type="file"
+          ref={fileInputRef}
+          onChange={handleFileInputChange}
+          accept=".pdf,.docx"
+          className="hidden"
+        />
+
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
           <div>
-            <h1 className="text-2xl font-display font-bold">Welcome, Sarah!</h1>
+            <h1 className="text-2xl font-display font-bold">Welcome, Amit Kumar!</h1>
             <p className="text-muted-foreground">Your AI-powered career dashboard</p>
           </div>
-          <Button variant="hero">
+          <Button variant="hero" onClick={() => fileInputRef.current?.click()}>
             <Upload className="w-4 h-4" />
             Update Resume
           </Button>
@@ -323,7 +360,7 @@ const CandidateDashboard = () => {
                   }`}
                   onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
                   onDragLeave={() => setIsDragging(false)}
-                  onDrop={() => { setIsDragging(false); setHasResume(true); }}
+                  onDrop={handleDrop}
                 >
                   <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-6">
                     <Upload className="w-8 h-8 text-primary" />
@@ -333,7 +370,7 @@ const CandidateDashboard = () => {
                     Drag and drop your resume here, or click to browse.<br />
                     Supports PDF and DOCX formats.
                   </p>
-                  <Button variant="hero" size="lg" onClick={() => setHasResume(true)}>
+                  <Button variant="hero" size="lg" onClick={() => fileInputRef.current?.click()}>
                     <Upload className="w-5 h-5" />
                     Choose File
                   </Button>
