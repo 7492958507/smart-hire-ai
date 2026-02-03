@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { 
   Brain, Users, Briefcase, FileText, BarChart3, Settings, LogOut, 
   Plus, Search, Filter, MoreVertical, ChevronDown, TrendingUp, 
@@ -11,6 +11,8 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
 
 const mockJobs = [
   { id: 1, title: "Senior React Developer", department: "Engineering", applicants: 45, status: "active", posted: "2 days ago" },
@@ -26,7 +28,29 @@ const mockCandidates = [
 ];
 
 const RecruiterDashboard = () => {
+  const navigate = useNavigate();
+  const { user, signOut } = useAuth();
   const [activeTab, setActiveTab] = useState("overview");
+  const [profile, setProfile] = useState<{ full_name: string } | null>(null);
+
+  useEffect(() => {
+    const fetchProfile = async () => {
+      if (user) {
+        const { data } = await supabase
+          .from("profiles")
+          .select("full_name")
+          .eq("user_id", user.id)
+          .maybeSingle();
+        setProfile(data);
+      }
+    };
+    fetchProfile();
+  }, [user]);
+
+  const handleSignOut = async () => {
+    await signOut();
+    navigate("/");
+  };
 
   const stats = [
     { label: "Active Jobs", value: "12", change: "+2", icon: Briefcase, color: "text-primary" },
@@ -72,7 +96,11 @@ const RecruiterDashboard = () => {
         </nav>
 
         <div className="absolute bottom-6 left-3 right-3">
-          <Button variant="ghost" className="w-full justify-start text-muted-foreground">
+          <Button 
+            variant="ghost" 
+            className="w-full justify-start text-muted-foreground"
+            onClick={handleSignOut}
+          >
             <LogOut className="w-4 h-4 mr-3" />
             Sign Out
           </Button>
@@ -84,7 +112,9 @@ const RecruiterDashboard = () => {
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
           <div>
-            <h1 className="text-2xl font-display font-bold">Welcome back, John!</h1>
+            <h1 className="text-2xl font-display font-bold">
+              Welcome back, {profile?.full_name || user?.email?.split("@")[0] || "there"}!
+            </h1>
             <p className="text-muted-foreground">Here's what's happening with your recruitment.</p>
           </div>
           <Button variant="hero">
