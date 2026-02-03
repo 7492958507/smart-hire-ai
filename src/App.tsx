@@ -8,6 +8,8 @@ import Auth from "./pages/Auth";
 import RecruiterDashboard from "./pages/RecruiterDashboard";
 import CandidateDashboard from "./pages/CandidateDashboard";
 import NotFound from "./pages/NotFound";
+import { ProtectedRoute } from "./components/ProtectedRoute";
+import { ChatBot } from "./components/ChatBot";
 
 const queryClient = new QueryClient();
 
@@ -20,11 +22,26 @@ const App = () => (
         <Routes>
           <Route path="/" element={<Index />} />
           <Route path="/auth" element={<Auth />} />
-          <Route path="/recruiter/dashboard" element={<RecruiterDashboard />} />
-          <Route path="/candidate/dashboard" element={<CandidateDashboard />} />
+          <Route 
+            path="/recruiter/dashboard" 
+            element={
+              <ProtectedRoute requiredRole="recruiter">
+                <RecruiterDashboard />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/candidate/dashboard" 
+            element={
+              <ProtectedRoute requiredRole="candidate">
+                <CandidateDashboard />
+              </ProtectedRoute>
+            } 
+          />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
+        <ChatBot />
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>

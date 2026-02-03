@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Link, useSearchParams, useNavigate } from "react-router-dom";
 import { Brain, Mail, Lock, User, Building2, ArrowRight, Eye, EyeOff } from "lucide-react";
@@ -7,6 +7,21 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
+import { z } from "zod";
+
+// Validation schemas
+const signUpSchema = z.object({
+  name: z.string().min(2, "Name must be at least 2 characters"),
+  email: z.string().email("Please enter a valid email"),
+  password: z.string().min(6, "Password must be at least 6 characters"),
+  company: z.string().optional(),
+});
+
+const signInSchema = z.object({
+  email: z.string().email("Please enter a valid email"),
+  password: z.string().min(1, "Password is required"),
+});
 
 const Auth = () => {
   const [searchParams] = useSearchParams();
@@ -20,6 +35,7 @@ const Auth = () => {
   const [role, setRole] = useState<"recruiter" | "candidate">(initialRole as "recruiter" | "candidate");
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>({});
   
   const [formData, setFormData] = useState({
     name: "",
@@ -28,27 +44,171 @@ const Auth = () => {
     company: "",
   });
 
+  // Check if user is already logged in
+  useEffect(() => {
+    const checkSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        // Fetch user role and redirect
+        const { data: roleData } = await supabase
+          .from("user_roles")
+          .select("role")
+          .eq("user_id", session.user.id)
+          .maybeSingle();
+        
+        if (roleData?.role === "recruiter") {
+          navigate("/recruiter/dashboard", { replace: true });
+        } else {
+          navigate("/candidate/dashboard", { replace: true });
+        }
+      }
+    };
+    
+    checkSession();
+  }, [navigate]);
+
+  const validateForm = () => {
+    try {
+      if (isSignUp) {
+        signUpSchema.parse({
+          name: formData.name,
+          email: formData.email,
+          password: formData.password,
+          company: role === "recruiter" ? formData.company : undefined,
+        });
+      } else {
+        signInSchema.parse({
+          email: formData.email,
+          password: formData.password,
+        });
+      }
+      setErrors({});
+      return true;
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        const newErrors: Record<string, string> = {};
+        err.errors.forEach((e) => {
+          if (e.path[0]) {
+            newErrors[e.path[0] as string] = e.message;
+          }
+        });
+        setErrors(newErrors);
+      }
+      return false;
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (!validateForm()) {
+      return;
+    }
+    
     setIsLoading(true);
     
-    // Simulate auth - in real app, this would connect to backend
-    setTimeout(() => {
-      setIsLoading(false);
-      toast({
-        title: isSignUp ? "Account created!" : "Welcome back!",
-        description: isSignUp 
-          ? "Your account has been created successfully." 
-          : "You have been signed in.",
-      });
-      
-      // Navigate to appropriate dashboard
-      if (role === "recruiter") {
-        navigate("/recruiter/dashboard");
+    try {
+      if (isSignUp) {
+        // Sign up with role in metadata
+        const redirectUrl = `${window.location.origin}/`;
+        
+        const { data, error } = await supabase.auth.signUp({
+          email: formData.email,
+          password: formData.password,
+          options: {
+            emailRedirectTo: redirectUrl,
+            data: {
+              full_name: formData.name,
+              role: role,
+              company: formData.company || undefined,
+            },
+          },
+        });
+
+        if (error) {
+          if (error.message.includes("already registered")) {
+            toast({
+              title: "Account exists",
+              description: "This email is already registered. Please sign in instead.",
+              variant: "destructive",
+            });
+          } else {
+            throw error;
+          }
+          return;
+        }
+
+        if (data.user) {
+          toast({
+            title: "Account created!",
+            description: "Please check your email to verify your account.",
+          });
+          
+          // If auto-confirm is enabled, redirect immediately
+          if (data.session) {
+            if (role === "recruiter") {
+              navigate("/recruiter/dashboard");
+            } else {
+              navigate("/candidate/dashboard");
+            }
+          }
+        }
       } else {
-        navigate("/candidate/dashboard");
+        // Sign in
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email: formData.email,
+          password: formData.password,
+        });
+
+        if (error) {
+          if (error.message.includes("Invalid login credentials")) {
+            toast({
+              title: "Invalid credentials",
+              description: "The email or password you entered is incorrect.",
+              variant: "destructive",
+            });
+          } else if (error.message.includes("Email not confirmed")) {
+            toast({
+              title: "Email not verified",
+              description: "Please check your email and verify your account before signing in.",
+              variant: "destructive",
+            });
+          } else {
+            throw error;
+          }
+          return;
+        }
+
+        if (data.user) {
+          toast({
+            title: "Welcome back!",
+            description: "You have been signed in.",
+          });
+          
+          // Get user role and redirect
+          const { data: roleData } = await supabase
+            .from("user_roles")
+            .select("role")
+            .eq("user_id", data.user.id)
+            .maybeSingle();
+          
+          if (roleData?.role === "recruiter") {
+            navigate("/recruiter/dashboard");
+          } else {
+            navigate("/candidate/dashboard");
+          }
+        }
       }
-    }, 1500);
+    } catch (error: any) {
+      console.error("Auth error:", error);
+      toast({
+        title: "Error",
+        description: error.message || "An unexpected error occurred. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -154,12 +314,13 @@ const Auth = () => {
                         id="name"
                         type="text"
                         placeholder="John Doe"
-                        className="pl-10"
+                        className={`pl-10 ${errors.name ? "border-destructive" : ""}`}
                         value={formData.name}
                         onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                         required
                       />
                     </div>
+                    {errors.name && <p className="text-xs text-destructive">{errors.name}</p>}
                   </div>
                 )}
 
@@ -175,7 +336,6 @@ const Auth = () => {
                         className="pl-10"
                         value={formData.company}
                         onChange={(e) => setFormData({ ...formData, company: e.target.value })}
-                        required
                       />
                     </div>
                   </div>
@@ -189,12 +349,13 @@ const Auth = () => {
                       id="email"
                       type="email"
                       placeholder="you@example.com"
-                      className="pl-10"
+                      className={`pl-10 ${errors.email ? "border-destructive" : ""}`}
                       value={formData.email}
                       onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                       required
                     />
                   </div>
+                  {errors.email && <p className="text-xs text-destructive">{errors.email}</p>}
                 </div>
 
                 <div className="space-y-2">
@@ -205,7 +366,7 @@ const Auth = () => {
                       id="password"
                       type={showPassword ? "text" : "password"}
                       placeholder="••••••••"
-                      className="pl-10 pr-10"
+                      className={`pl-10 pr-10 ${errors.password ? "border-destructive" : ""}`}
                       value={formData.password}
                       onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                       required
@@ -218,6 +379,7 @@ const Auth = () => {
                       {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
                   </div>
+                  {errors.password && <p className="text-xs text-destructive">{errors.password}</p>}
                 </div>
 
                 <Button type="submit" variant="hero" className="w-full" size="lg" disabled={isLoading}>
@@ -238,7 +400,10 @@ const Auth = () => {
                 </span>{" "}
                 <button
                   type="button"
-                  onClick={() => setIsSignUp(!isSignUp)}
+                  onClick={() => {
+                    setIsSignUp(!isSignUp);
+                    setErrors({});
+                  }}
                   className="text-primary hover:underline font-medium"
                 >
                   {isSignUp ? "Sign in" : "Sign up"}

@@ -1,6 +1,6 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { 
   Brain, FileText, Briefcase, BarChart3, Settings, LogOut, 
   Upload, CheckCircle, AlertCircle, Lightbulb, TrendingUp,
@@ -11,6 +11,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
+import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
 
 const mockSkills = {
   matched: ["React", "TypeScript", "JavaScript", "Node.js", "Git"],
@@ -31,10 +33,32 @@ const mockJobs = [
 ];
 
 const CandidateDashboard = () => {
+  const navigate = useNavigate();
+  const { user, signOut } = useAuth();
   const [activeTab, setActiveTab] = useState("overview");
   const [hasResume, setHasResume] = useState(true);
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [profile, setProfile] = useState<{ full_name: string } | null>(null);
+
+  useEffect(() => {
+    const fetchProfile = async () => {
+      if (user) {
+        const { data } = await supabase
+          .from("profiles")
+          .select("full_name")
+          .eq("user_id", user.id)
+          .maybeSingle();
+        setProfile(data);
+      }
+    };
+    fetchProfile();
+  }, [user]);
+
+  const handleSignOut = async () => {
+    await signOut();
+    navigate("/");
+  };
 
   const handleFileUpload = (file: File) => {
     const validTypes = ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
@@ -101,7 +125,11 @@ const CandidateDashboard = () => {
         </nav>
 
         <div className="absolute bottom-6 left-3 right-3">
-          <Button variant="ghost" className="w-full justify-start text-muted-foreground">
+          <Button 
+            variant="ghost" 
+            className="w-full justify-start text-muted-foreground"
+            onClick={handleSignOut}
+          >
             <LogOut className="w-4 h-4 mr-3" />
             Sign Out
           </Button>
@@ -122,7 +150,9 @@ const CandidateDashboard = () => {
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
           <div>
-            <h1 className="text-2xl font-display font-bold">Welcome, Amit Kumar!</h1>
+            <h1 className="text-2xl font-display font-bold">
+              Welcome, {profile?.full_name || user?.email?.split("@")[0] || "there"}!
+            </h1>
             <p className="text-muted-foreground">Your AI-powered career dashboard</p>
           </div>
           <Button variant="hero" onClick={() => fileInputRef.current?.click()}>
